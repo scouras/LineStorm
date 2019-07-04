@@ -9,13 +9,13 @@
  *
  * ======================================================================== */
 
-#define VERBOSE true
+#define VERBOSE 1
 #ifdef VERBOSE
   #define LOG Serial
 #endif
-#include <log.h>
-#include <now.h>
-#include <pacer.h>
+#include "log.h"
+#include "now.h"
+#include "pacer.h"
 
 // ================================================================ NEOTRELLIS
 
@@ -35,36 +35,42 @@ Adafruit_ADXL343 adxl = Adafruit_ADXL343(123, &Wire1);
 // ~1kFPS. But NeoPixels only PWM at "no less than 400 Hz" (potentially
 // 100kHz PWM clock), so no reason to drive that fast. We'll limit to 100 fps.
 
-#define INITIAL_BRIGHTNESS   128
+#define INITIAL_BRIGHTNESS   32
 #define PACER_LED_INTERVAL    10
 #define PACER_LED_ENABLED   true
 Pacer *pLEDs;
 
-#include <FastLED.h>
-const CRGB colorInit = CRGB::Magenta;
-const CRGB colorOn   = CRGB::Red;
-const CRGB colorOff  = CRGB::Blue;
+//#include <FastLED.h>
+//const CRGB colorInit = CRGB::Magenta;
+//const CRGB colorOn   = CRGB::Red;
+//const CRGB colorOff  = CRGB::Blue;
+const uint32_t colorInit = 0xBB00BB;
+const uint32_t colorOn   = 0xFFFFFF;
+const uint32_t colorOff  = 0x009999;
 
 const uint8_t LED_COLS = 8;
 const uint8_t LED_ROWS = 4;
 const uint8_t LED_KEYS = LED_COLS + LED_ROWS;
-CRGB leds[LED_KEYS];
+//CRGB leds[LED_KEYS];
 
 // Convert FastLED to NeoPixel_ZeroDMA
+/*
 void showLEDs() { 
   if (! pLEDs->ready()) return;
   for (int i = 0; i < LED_KEYS; i++) {
     CRGB l = leds[i];
-    trellis.setPixelColor(i, l.r, l.g, l.b);
+    trellis.setPixelColor(i, (uint8_t)l.r, (uint8_t)l.g, (uint8_t)l.b);
+    //trellis.setPixelColor(i, 256);
   }
   trellis.show();
 }
+*/
 
 
 
 // ======================================================================= I2C
 #include <Wire.h>
-#include <I2C_Anything.h>
+#include "I2C_Anything.h"
 
 const byte I2C_MASTER      = 23;
 const byte I2C_CONTROLLER  = 42;
@@ -107,7 +113,9 @@ void setup(){
   //--- Serial
   if (VERBOSE) {
     Serial.begin(115200);
-    while (!Serial);
+    Serial.setTimeout(1000);
+    //while (!Serial) { delay(1); }
+    delay(1000);
   }
   log_printf( "NeoTrellis Controller Setup");
 
@@ -115,7 +123,7 @@ void setup(){
   trellis.begin();
   trellis.setBrightness(INITIAL_BRIGHTNESS);
   trellis.fill(colorInit);
-
+  
   //--- I2C
   Wire.begin(I2C_CONTROLLER); // join i2c bus (address optional for master)
   Wire.setClock(400000L);
@@ -127,6 +135,7 @@ void setup(){
   log_printf("Accellerometer ID: %d", adxl.getDeviceID());
 
   log_printf("Setup Complete");
+
 }
 
 
@@ -237,17 +246,21 @@ void loop() {
     if (e.bit.EVENT == KEY_JUST_PRESSED) {
       Serial.print("Key On "); Serial.println(i);
       pressed[i] = true;     
-      send_key(i, KEY_JUST_PRESSED);
+      //send_key(i, KEY_JUST_PRESSED);
+      //leds[i] = colorOn;
       trellis.setPixelColor(i, colorOn);  
     }
     else if (e.bit.EVENT == KEY_JUST_RELEASED) {
       Serial.print("Key Off "); Serial.println(i);
       pressed[i] = false;
-      send_key(i, KEY_JUST_RELEASED);
+      //send_key(i, KEY_JUST_RELEASED);
+      //leds[i] = colorOff;
       trellis.setPixelColor(i, colorOff);  
     }
   }
-
+  //showLEDs();
+  //return;
+  trellis.show();
 
 
   //----------------------------------------------------------- Accellerometer
@@ -284,6 +297,7 @@ void loop() {
 
     accelReadTime= t;
   }
+
 }
 
 
