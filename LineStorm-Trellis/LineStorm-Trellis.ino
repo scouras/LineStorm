@@ -6,7 +6,21 @@
  * * Adafruit_ADXL343
  * * Adafruit_NeoPixel
  *
- *
+ * =========================================================================
+ * 0.5
+ * button 1 down
+ * - save orientation - O_START
+ * - save parameter map
+ * every 10 ms
+ * while orientation < 30
+ *   receive 30 / delta
+ *   O_NOW
+ *   O_delta = O_START - O_NOW
+ *   P_OLD = get_old_p
+ *   log_P_OLD = log P
+ *   log_P = log_P_old + delta * scalar
+ * over 3 seconds at 10ms resolution:
+ *   rotate 30 degrees
  * ======================================================================== */
 
 #define VERBOSE 1
@@ -35,7 +49,7 @@ Adafruit_ADXL343 adxl = Adafruit_ADXL343(123, &Wire1);
 // ~1kFPS. But NeoPixels only PWM at "no less than 400 Hz" (potentially
 // 100kHz PWM clock), so no reason to drive that fast. We'll limit to 100 fps.
 
-#define INITIAL_BRIGHTNESS   32
+#define INITIAL_BRIGHTNESS   128
 #define PACER_LED_INTERVAL    10
 #define PACER_LED_ENABLED   true
 Pacer *pLEDs;
@@ -229,7 +243,30 @@ void get_orientation(float x, float y, float z,
 
 // NOTE: We're just not doing to deal with this yet. ^^
 
+float o_start_roll = 0.0, o_start_pitch = 0.0, o_start_yaw = 0.0;
 
+void handle_key_press(int i) {
+  Serial.print("Key On "); Serial.println(i);
+  if (i == 0) {
+    if (pressed[i] == false) {
+      o_start_roll = roll;
+      o_start_pitch = pitch;
+      o_start_yaw = yaw;
+    }
+  }
+  pressed[i] = true;     
+  trellis.setPixelColor(i, colorOn);
+  //send_key(i, KEY_JUST_PRESSED);
+  //leds[i] = colorOn;
+}
+
+void handle_key_release(int i) {
+  Serial.print("Key Off "); Serial.println(i);
+  pressed[i] = false;     
+  trellis.setPixelColor(i, colorOff);  
+  //send_key(i, KEY_JUST_RELEASED);
+  //leds[i] = colorOff;
+}
 
 // ###################################################################### LOOP
 
@@ -238,30 +275,20 @@ void loop() {
 
   unsigned long t = millis();
 
-
   //------------------------------------------------------------------- KeyPad
   while (trellis.available()){
     keypadEvent e = trellis.read();
     uint8_t i = e.bit.KEY;
     if (e.bit.EVENT == KEY_JUST_PRESSED) {
-      Serial.print("Key On "); Serial.println(i);
-      pressed[i] = true;     
-      //send_key(i, KEY_JUST_PRESSED);
-      //leds[i] = colorOn;
-      trellis.setPixelColor(i, colorOn);  
+      handle_key_press(i);
     }
     else if (e.bit.EVENT == KEY_JUST_RELEASED) {
-      Serial.print("Key Off "); Serial.println(i);
-      pressed[i] = false;
-      //send_key(i, KEY_JUST_RELEASED);
-      //leds[i] = colorOff;
-      trellis.setPixelColor(i, colorOff);  
+      handle_key_release(i);
     }
   }
   //showLEDs();
   //return;
   trellis.show();
-
 
   //----------------------------------------------------------- Accellerometer
 
@@ -281,6 +308,20 @@ void loop() {
 
     get_orientation(x, y, z, roll, pitch, yaw);
 
+    // If button 0 is active, modify brightness
+    if (pressed[0] == true) {
+      float delta = abs(roll - o_start_roll);
+      float sign = (roll >= o_start_roll ? 1.0 : -1.0);
+      float brightness_per_degree = INITIAL_BRIGHTNESS / 90.0;
+      uint8_t new_brightness = min(255, max(0, uint8_t(INITIAL_BRIGHTNESS + (sign * delta * brightness_per_degree))));
+      Serial.print("Delta: "); Serial.print(delta); Serial.print("\n");
+      Serial.print("Sign: "); Serial.print(sign); Serial.print("\n");
+      Serial.print("New brightness: "); Serial.print(new_brightness); Serial.print("\n");
+      trellis.setBrightness(new_brightness);
+    //} else {
+    //  trellis.setBrightness(INITIAL_BRIGHTNESS);
+    }
+
     send_acceleration(x, y, z);
     send_orientation(roll, pitch);
 
@@ -291,8 +332,9 @@ void loop() {
                          Serial.print(y);                    Serial.print("  ");
     Serial.print("Z: "); Serial.print(event.acceleration.z); Serial.print(" / ");
                          Serial.print(z);                    Serial.print("  ");
-    Serial.print("R: "); Serial.print(roll);
-    Serial.print("P: "); Serial.print(pitch);
+    Serial.print("R: "); Serial.print(roll);		     Serial.print("  ");
+    Serial.print("P: "); Serial.print(pitch);		     Serial.print("  ");
+    Serial.print("Y: "); Serial.print(yaw);
     Serial.println();
 
     accelReadTime= t;
